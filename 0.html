@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <title>Webtoon Viewer</title>
+    <style>
+        /* [기본 설정] */
+        :root {
+            --bg-color: #0f0f0f;
+            --text-color: #ffffff;
+            --accent-color: #4a90e2;
+        }
+        
+        body, html {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            scroll-behavior: smooth;
+        }
+
+        /* [1. Click to Start - 튜토리얼 오프닝 커버] */
+        #intro-screen {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background-color: rgba(15, 15, 15, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 0.5s ease;
+            cursor: pointer;
+        }
+
+        .tutorial-box {
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.2);
+            padding: 40px;
+            border-radius: 12px;
+            background: rgba(0,0,0,0.5);
+            max-width: 80%;
+        }
+
+        .tutorial-title {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+
+        .tutorial-text {
+            font-size: 1.1rem;
+            line-height: 1.6;
+            color: #ccc;
+            margin-bottom: 10px;
+        }
+
+        .mobile-hint {
+            display: none;
+            color: var(--accent-color);
+            font-weight: bold;
+            margin-top: 15px;
+        }
+
+        .click-to-start {
+            margin-top: 30px;
+            font-size: 1.2rem;
+            animation: blink 1.5s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        /* [2. Tab & Scene - 씬(페이지) 전환 및 메인 뷰어] */
+        #page-indicator {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 1rem;
+            font-weight: bold;
+            z-index: 1000;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        #webtoon-content {
+            width: 100%;
+            max-width: 1216px;
+            margin: 0 auto;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .scene {
+            display: none;
+            width: 100%;
+            animation: fadeIn 0.4s ease;
+        }
+
+        .scene.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .webtoon-img {
+            width: 100%;
+            height: auto;
+            display: block;
+            cursor: zoom-in;
+        }
+
+        /* 네비게이션 버튼 */
+        .nav-btn {
+            position: fixed;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(0, 0, 0, 0.6);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.2);
+            padding: 20px 15px;
+            cursor: pointer;
+            font-size: 1.2rem;
+            border-radius: 8px;
+            z-index: 1000;
+            transition: background 0.3s, transform 0.2s;
+        }
+
+        .nav-btn:hover {
+            background: rgba(0, 0, 0, 0.9);
+            transform: translateY(-50%) scale(1.05);
+        }
+
+        .nav-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        #prev-btn { left: 20px; }
+        #next-btn { right: 20px; }
+
+        /* [3. Inspect Mode - 이미지 모달] */
+        #modal-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0, 0, 0, 0.95);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+            cursor: zoom-out;
+        }
+        
+        #modal-overlay.active {
+            display: flex;
+        }
+
+        #modal-img {
+            max-width: 95%;
+            max-height: 95%;
+            object-fit: contain;
+            border: 2px solid rgba(255,255,255,0.1);
+        }
+
+        /* 고정 CTA 버튼 (선택적 표시) */
+        #cta-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 30px;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 1000;
+            display: none; /* 최소한의 UI를 위해 기본 숨김, 필요시 JS에서 해제 */
+        }
+
+        /* 모바일 대응 (반응형) */
+        @media (max-width: 768px) {
+            .mobile-hint {
+                display: block; /* 모바일에서만 핀치줌 텍스트 표시 */
+            }
+            .nav-btn {
+                bottom: 20px;
+                top: auto;
+                transform: none;
+                padding: 15px 25px;
+                font-size: 1rem;
+            }
+            .nav-btn:hover {
+                transform: none;
+            }
+            #prev-btn { left: 10px; }
+            #next-btn { right: 10px; }
+            .tutorial-box { padding: 25px 15px; width: 90%; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="intro-screen" onclick="startViewer()">
+        <div class="tutorial-box">
+            <div class="tutorial-title">SYSTEM GUIDE</div>
+            <div class="tutorial-text">
+                양 옆의 <strong>[이전]</strong>, <strong>[다음]</strong> 버튼을 눌러 페이지를 이동할 수 있습니다.<br>
+                페이지 이동 시 자동으로 화면 최상단으로 이동합니다.
+            </div>
+            <div class="tutorial-text">
+                이미지를 클릭하면 원본 크기로 <strong>자세히 보기(Inspect Mode)</strong>가 가능합니다.
+            </div>
+            <div class="mobile-hint">
+                <br>📱 화면을 엄지와 검지로 벌려 확대(Zoom-in) 할 수 있습니다.
+            </div>
+            <div class="click-to-start">[ 화면을 클릭하여 시작하세요 ]</div>
+        </div>
+    </div>
+
+    <audio id="bgm" loop>
+        </audio>
+
+    <div id="page-indicator">1 / 10</div>
+
+    <main id="webtoon-content">
+        </main>
+
+    <button id="prev-btn" class="nav-btn" onclick="changePage(-1)">이전</button>
+    <button id="next-btn" class="nav-btn" onclick="changePage(1)">다음</button>
+
+    <div id="modal-overlay" onclick="closeModal()">
+        <img id="modal-img" src="" alt="Inspect View">
+    </div>
+
+    <button id="cta-btn">게임 시작</button>
+
+    <script>
+        // 웹툰 이미지 데이터 (총 10장)
+        const imageUrls = [
+            "https://vb.geekoki.uk/webtoon/0.webp",
+            "https://vb.geekoki.uk/webtoon/1.webp",
+            "https://vb.geekoki.uk/webtoon/2.webp",
+            "https://vb.geekoki.uk/webtoon/3.webp",
+            "https://vb.geekoki.uk/webtoon/4.webp",
+            "https://vb.geekoki.uk/webtoon/5.webp",
+            "https://vb.geekoki.uk/webtoon/6.webp",
+            "https://vb.geekoki.uk/webtoon/7.webp",
+            "https://vb.geekoki.uk/webtoon/8.webp",
+            "https://vb.geekoki.uk/webtoon/9.webp"
+        ];
+
+        let currentPage = 0;
+        const totalPages = imageUrls.length;
+
+        // 초기 DOM 렌더링
+        function initViewer() {
+            const container = document.getElementById('webtoon-content');
+            
+            imageUrls.forEach((url, index) => {
+                const section = document.createElement('section');
+                section.className = 'scene';
+                section.id = `page-${index}`;
+                
+                const img = document.createElement('img');
+                img.src = url;
+                img.className = 'webtoon-img';
+                img.loading = 'lazy'; // 긴 이미지 로딩 최적화
+                img.alt = `웹툰 페이지 ${index + 1}`;
+                
+                // Inspect Mode 연결
+                img.onclick = () => openModal(url);
+
+                section.appendChild(img);
+                container.appendChild(section);
+            });
+
+            updateView();
+        }
+
+        // [Click to Start] 시작 함수
+        function startViewer() {
+            const intro = document.getElementById('intro-screen');
+            intro.style.opacity = '0';
+            
+            // 오디오 재생 시도 (소스가 비어있으므로 에러 무시 처리)
+            const bgm = document.getElementById('bgm');
+            bgm.volume = 0.3;
+            bgm.play().catch(e => console.log("BGM 재생 보류 (음원 없음)"));
+
+            setTimeout(() => {
+                intro.style.display = 'none';
+            }, 500);
+        }
+
+        // 페이지 전환 로직 (Tab & Scene)
+        function changePage(direction) {
+            const newPage = currentPage + direction;
+            
+            if (newPage >= 0 && newPage < totalPages) {
+                currentPage = newPage;
+                updateView();
+                // 페이지 전환 시 최상단으로 이동 (핵심 요구사항)
+                window.scrollTo({ top: 0, behavior: 'instant' }); 
+            }
+        }
+
+        // 화면 UI 업데이트 로직
+        function updateView() {
+            // 모든 씬 숨기기
+            document.querySelectorAll('.scene').forEach(scene => {
+                scene.classList.remove('active');
+            });
+            
+            // 현재 씬 보여주기
+            const activeScene = document.getElementById(`page-${currentPage}`);
+            if(activeScene) activeScene.classList.add('active');
+
+            // 인디케이터 업데이트 (n / 10)
+            document.getElementById('page-indicator').innerText = `${currentPage + 1} / ${totalPages}`;
+
+            // 버튼 활성/비활성 처리
+            document.getElementById('prev-btn').disabled = (currentPage === 0);
+            document.getElementById('next-btn').disabled = (currentPage === totalPages - 1);
+        }
+
+        // [Inspect Mode] 이미지 확대 모달 오픈
+        function openModal(url) {
+            const modal = document.getElementById('modal-overlay');
+            const modalImg = document.getElementById('modal-img');
+            modalImg.src = url;
+            modal.classList.add('active');
+        }
+
+        // [Inspect Mode] 닫기
+        function closeModal() {
+            const modal = document.getElementById('modal-overlay');
+            modal.classList.remove('active');
+            document.getElementById('modal-img').src = ""; // 메모리 해제
+        }
+
+        // 초기화 실행
+        initViewer();
+    </script>
+</body>
+</html>
